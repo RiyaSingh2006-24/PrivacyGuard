@@ -25,6 +25,16 @@ def mount_frontend(app):
             name="frontend-assets",
         )
 
+    # main.py historically exposed an API information route at "/".
+    # In the packaged consumer app, the browser root must always open
+    # the React dashboard. This middleware handles only the exact root
+    # path and leaves every /api/* endpoint untouched.
+    @app.middleware("http")
+    async def privacyguard_frontend_root(request, call_next):
+        if request.url.path == "/":
+            return FileResponse(index_file)
+        return await call_next(request)
+
     @app.get("/", include_in_schema=False)
     async def privacyguard_frontend():
         return FileResponse(index_file)
