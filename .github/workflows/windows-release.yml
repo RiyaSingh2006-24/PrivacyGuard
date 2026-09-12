@@ -9,6 +9,7 @@ on:
       - "backend/**"
       - "frontend/**"
       - "installer/**"
+      - "tests/windows_acceptance.ps1"
       - ".github/workflows/windows-release.yml"
 
 permissions:
@@ -17,7 +18,7 @@ permissions:
 jobs:
   build-windows:
     runs-on: windows-latest
-    timeout-minutes: 30
+    timeout-minutes: 35
 
     steps:
       - name: Checkout source
@@ -116,12 +117,10 @@ jobs:
           }
           & $iscc "installer\PrivacyGuard.iss"
 
-      - name: Smoke test Windows installer
+      - name: Install PrivacyGuard for acceptance test
         shell: pwsh
         run: |
           $installer = (Resolve-Path "release/PrivacyGuard-Setup-2.1.0.exe").Path
-          $installDir = Join-Path $env:LOCALAPPDATA "Programs\PrivacyGuard"
-
           $setup = Start-Process -FilePath $installer `
             -ArgumentList "/VERYSILENT", "/SUPPRESSMSGBOXES", "/NORESTART", "/SP-" `
             -Wait -PassThru
@@ -130,39 +129,22 @@ jobs:
             throw "Installer exited with code $($setup.ExitCode)."
           }
 
-          $installedExe = Join-Path $installDir "PrivacyGuard.exe"
+          $installedExe = Join-Path $env:LOCALAPPDATA "Programs\PrivacyGuard\PrivacyGuard.exe"
           if (-not (Test-Path $installedExe)) {
             throw "Installed PrivacyGuard.exe was not found at $installedExe"
           }
 
-          $process = Start-Process -FilePath $installedExe -PassThru
-          try {
-            $ready = $false
-            for ($i = 0; $i -lt 15; $i++) {
-              Start-Sleep -Seconds 1
-              try {
-                $response = Invoke-RestMethod -Uri "http://127.0.0.1:8000/api/health" -TimeoutSec 2
-                if ($response.status -eq "online") {
-                  $ready = $true
-                  break
-                }
-              } catch {
-              }
-            }
+      - name: Run Windows acceptance tests
+        shell: pwsh
+        run: ./tests/windows_acceptance.ps1
 
-            if (-not $ready) {
-              throw "Installed PrivacyGuard did not become healthy on port 8000."
-            }
-
-            Write-Host "PrivacyGuard installer health check passed."
-          }
-          finally {
-            if (-not $process.HasExited) {
-              Stop-Process -Id $process.Id -Force
-            }
-          }
-
+      - name: Uninstall PrivacyGuard
+        if: always()
+        shell: pwsh
+        run: |
+          $installDir = Join-Path $env:LOCALAPPDATA "Programs\PrivacyGuard"
           $uninstaller = Join-Path $installDir "unins000.exe"
+
           if (Test-Path $uninstaller) {
             $uninstall = Start-Process -FilePath $uninstaller `
               -ArgumentList "/VERYSILENT", "/SUPPRESSMSGBOXES", "/NORESTART" `
