@@ -1,0 +1,133 @@
+name: Windows Build and Installer
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+    paths:
+      - "backend/**"
+      - "frontend/**"
+      - "installer/**"
+      - ".github/workflows/windows-release.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  build-windows:
+    runs-on: windows-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Install Python dependencies
+        shell: pwsh
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r backend/requirements.txt
+          python -m pip install pyinstaller
+
+      - name: Install frontend dependencies
+        working-directory: frontend
+        shell: pwsh
+        run: npm install
+
+      - name: Build React frontend
+        working-directory: frontend
+        shell: pwsh
+        run: npm run build
+
+      - name: Copy frontend into local engine
+        shell: pwsh
+        run: |
+          if (Test-Path "backend/web") {
+            Remove-Item "backend/web" -Recurse -Force
+          }
+          New-Item -ItemType Directory -Path "backend/web" | Out-Null
+          Copy-Item "frontend/dist/*" "backend/web/" -Recurse -Force
+
+      - name: Build PrivacyGuard.exe
+        working-directory: backend
+        shell: pwsh
+        run: |
+          python -m PyInstaller `
+            --noconfirm `
+            --clean `
+            --onedir `
+            --name PrivacyGuard `
+            --add-data "web;web" `
+            --collect-all reportlab `
+            start_backend.py
+
+      - name: Smoke test packaged app
+        shell: pwsh
+        run: |
+          $process = Start-Process -FilePath "backend/dist/PrivacyGuard/PrivacyGuard.exe" -PassThru
+          try {
+            $ready = $false
+            for ($i = 0; $i -lt 15; $i++) {
+              Start-Sleep -Seconds 1
+              try {
+                $response = Invoke-RestMethod -Uri "http://127.0.0.1:8000/api/health" -TimeoutSec 2
+                if ($response.status -eq "online") {
+                  $ready = $true
+                  break
+                }
+              } catch {
+              }
+            }
+
+            if (-not $ready) {
+              throw "Packaged PrivacyGuard did not become healthy on port 8000."
+            }
+
+            Write-Host "PrivacyGuard packaged health check passed."
+          }
+          finally {
+            if (-not $process.HasExited) {
+              Stop-Process -Id $process.Id -Force
+            }
+          }
+
+      - name: Install Inno Setup
+        shell: pwsh
+        run: choco install innosetup -y --no-progress
+
+      - name: Build Windows installer
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Path "release" -Force | Out-Null
+          $iscc = "C:\Program Files (x86)\Inno Setup 6\ISCC.exe"
+          if (-not (Test-Path $iscc)) {
+            throw "Inno Setup compiler was not found at $iscc"
+          }
+          & $iscc "installer\PrivacyGuard.iss"
+
+      - name: Upload portable Windows build
+        uses: actions/upload-artifact@v4
+        with:
+          name: PrivacyGuard-Windows-Portable-2.1.0
+          path: backend/dist/PrivacyGuard/
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Upload Windows installer
+        uses: actions/upload-artifact@v4
+        with:
+          name: PrivacyGuard-Windows-Installer-2.1.0
+          path: release/PrivacyGuard-Setup-2.1.0.exe
+          if-no-files-found: error
+          retention-days: 14
