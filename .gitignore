@@ -1,0 +1,42 @@
+# Python
+__pycache__/
+*.py[cod]
+*.log
+
+# Virtual environments
+backend/venv/
+venv/
+.env
+
+# Private local application data
+*.db
+*.sqlite
+*.sqlite3
+
+# React
+frontend/node_modules/
+frontend/dist/
+
+# Generated frontend copy
+backend/web/
+
+# Packaging
+backend/build/
+backend/dist/
+*.pyc
+
+# OS / editors
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+# Secrets
+.env.*
+!.env.example
+
+# Generated reports / packaging metadata
+*.pdf
+*.spec
+backend/requirements-lock.txt
+frontend/src/*.save
