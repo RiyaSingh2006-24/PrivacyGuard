@@ -4,7 +4,7 @@
 
 PrivacyGuard is a local-first security application that helps users understand what is visible on their home network and whether their email identity appears in known breach intelligence. It combines local network discovery, service exposure checks, device recognition, trusted-device tracking, identity exposure checks, persistent history, a transparent heuristic security score, and downloadable PDF reports in one dashboard.
 
-> **Status:** active beta / portfolio project. Linux packaging has been tested in the development environment. Windows builds are now produced automatically on GitHub Actions and include a per-user installer, but the Windows release should remain labelled beta until the installer is manually verified on a clean Windows machine.
+> **Status:** active beta / portfolio project. Linux packaging has been tested in the development environment. The Windows executable and installer now pass automated acceptance testing on a clean GitHub-hosted Windows runner, including install, startup, frontend routing, local APIs, PDF report generation, trusted-device persistence across restart, and uninstall. A final manual check on ordinary consumer Windows hardware is still recommended before calling the release fully production-ready.
 
 ## Features
 
@@ -22,7 +22,7 @@ PrivacyGuard is a local-first security application that helps users understand w
 - React/Vite frontend bundled into the local application
 - Linux packaging with PyInstaller
 - Windows packaging with PyInstaller + Inno Setup
-- Automated Windows build and packaged-app health smoke test with GitHub Actions
+- Automated Windows build, install, functional acceptance, persistence, report, and uninstall tests with GitHub Actions
 
 ## Architecture
 
@@ -80,6 +80,8 @@ PrivacyGuard/
 │   └── vite.config.js
 ├── installer/
 │   └── PrivacyGuard.iss
+├── tests/
+│   └── windows_acceptance.ps1
 ├── PRIVACY.md
 ├── SECURITY.md
 ├── RELEASE_CHECKLIST.md
@@ -154,7 +156,7 @@ backend\build_windows.bat
 
 The script prepares dependencies, builds the React frontend, and packages the application into `backend\dist\PrivacyGuard\`.
 
-### Automated Windows build
+### Automated Windows build and acceptance test
 
 The repository includes `.github/workflows/windows-release.yml`. On relevant pushes to `main`, GitHub Actions:
 
@@ -162,7 +164,10 @@ The repository includes `.github/workflows/windows-release.yml`. On relevant pus
 2. creates `PrivacyGuard.exe` with PyInstaller,
 3. starts the packaged executable and verifies `/api/health`,
 4. creates `PrivacyGuard-Setup-2.1.0.exe` with Inno Setup,
-5. uploads both the portable package and installer as workflow artifacts.
+5. silently installs the application,
+6. runs `tests/windows_acceptance.ps1` against the installed copy,
+7. verifies Dashboard and SPA routes, network information, history, trust status, invalid identity validation, network-scan safety behavior, PDF report generation, SQLite creation, trusted-device persistence across restart, and uninstall,
+8. uploads both the portable package and installer as workflow artifacts.
 
 The installer uses a per-user install directory, so it does not require administrator privileges for the normal installation path.
 
@@ -191,7 +196,7 @@ See [`PRIVACY.md`](PRIVACY.md) for additional privacy notes.
 - MAC resolution depends on the local neighbor/ARP cache and may be unavailable for some devices.
 - Device type identification is intentionally conservative.
 - The current service scanner checks a selected set of common TCP ports rather than performing a full vulnerability assessment.
-- Windows support remains beta until the installer completes the manual checks in [`RELEASE_CHECKLIST.md`](RELEASE_CHECKLIST.md).
+- A final manual validation on ordinary consumer Windows hardware is still recommended before production release.
 - The current Windows build is unsigned, so SmartScreen may display an unknown-publisher warning.
 
 ## Authorized Use
